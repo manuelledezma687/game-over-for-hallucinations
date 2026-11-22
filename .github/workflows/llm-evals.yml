@@ -1,0 +1,25 @@
+name: llm-evals
+on:
+  pull_request:          # Level 5: every prompt, model or document change is a release
+  schedule:
+    - cron: "17 3 * * 1" # weekly: re-check the judge, models drift
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck && npm test        # free, deterministic, seconds
+      - run: npm run eval                          # golden set (L1-L3)
+      - run: npm run eval:attacks                  # prompt injection (L4)
+      - run: npm run gate                          # blocks on FAIL or PASS -> FAIL
+      - run: npm run gate:attacks
+      - if: github.event_name == 'schedule'
+        run: npm run eval:judge && npm run calibrate   # is the judge still trustworthy?
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: eval-reports, path: reports/ }

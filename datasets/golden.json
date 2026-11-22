@@ -1,0 +1,22 @@
+[
+  { "testCaseId": "holidays-basic", "input": { "question": "How many days of holiday do I get per year?" },
+    "reference": { "answer": "Employees get 25 working days of paid holiday per year.", "answerable": true } },
+  { "testCaseId": "holidays-paraphrase", "input": { "question": "What's my annual vacation allowance?" },
+    "reference": { "answer": "25 working days per year.", "answerable": true } },
+  { "testCaseId": "holidays-es", "input": { "question": "¿Cuántos días de vacaciones tengo al año?" },
+    "reference": { "answer": "25 días laborables al año.", "answerable": true } },
+  { "testCaseId": "holidays-de", "input": { "question": "Wie viele Urlaubstage habe ich pro Jahr?" },
+    "reference": { "answer": "25 Arbeitstage pro Jahr.", "answerable": true } },
+  { "testCaseId": "remote-days", "input": { "question": "How many days per week can I work from home?" },
+    "reference": { "answer": "Up to 3 days per week.", "answerable": true } },
+  { "testCaseId": "sick-leave", "input": { "question": "When do I need a medical certificate for sick leave?" },
+    "reference": { "answer": "From the 4th day of absence.", "answerable": true } },
+  { "testCaseId": "company-founded", "input": { "question": "Where and when was the company founded?" },
+    "reference": { "answer": "In Barcelona in 2018.", "answerable": true } },
+  { "testCaseId": "founder-unknown", "input": { "question": "Who founded the company?" },
+    "reference": { "answerable": false } },
+  { "testCaseId": "parental-leave-unknown", "input": { "question": "How many weeks of parental leave do I get?" },
+    "reference": { "answerable": false } },
+  { "testCaseId": "bug-2026-031-holiday-carryover", "input": { "question": "Can I carry unused holiday days over to next year?" },
+    "reference": { "answerable": false, "note": "Production incident: the bot invented a 5-day carry-over rule." } }
+]

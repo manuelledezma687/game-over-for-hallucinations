@@ -1,0 +1,37 @@
+{
+  "name": "game-over-for-hallucinations",
+  "version": "1.0.0",
+  "description": "DevFest Linz demo: 5 levels to test a Gemini app with Genkit",
+  "scripts": {
+    "dev": "genkit start -- tsx --watch src/index.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc",
+    "eval": "tsx scripts/eval.ts golden",
+    "eval:attacks": "tsx scripts/eval.ts attacks",
+    "eval:judge": "tsx scripts/eval.ts judge",
+    "calibrate": "tsx scripts/calibrate.ts reports/calibration.json datasets/judge-calibration.json",
+    "gate": "tsx scripts/gate.ts reports/current.json baselines/golden.json",
+    "gate:attacks": "tsx scripts/gate.ts reports/attacks.json baselines/attacks.json",
+    "prerun": "tsx scripts/eval.ts prerun",
+    "demo": "tsx scripts/demo.ts",
+    "demo:offline": "tsx scripts/simulate.ts && tsx scripts/demo.ts --offline",
+    "smoke": "tsx scripts/smoke.ts",
+    "postinstall": "node scripts/fix-evaluator.mjs"
+  },
+  "author": "Manuel Ledezma",
+  "license": "MIT",
+  "dependencies": {
+    "@genkit-ai/evaluator": "^1.44.0",
+    "@genkit-ai/firebase": "^1.44.0",
+    "@genkit-ai/google-genai": "^1.44.0",
+    "genkit": "^1.44.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "genkit-cli": "^1.45.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "type": "module",
+  "private": true
+}

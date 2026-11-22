@@ -1,0 +1,22 @@
+[
+  { "testCaseId": "cal-01", "input": { "question": "How many holiday days?" }, "output": "Employees get 25 working days of paid holiday per year.",
+    "context": ["Holiday policy: employees are entitled to 25 working days of paid holiday per year."], "reference": { "human": "PASS" } },
+  { "testCaseId": "cal-02", "input": { "question": "How many holiday days?" }, "output": "Employees get 30 working days of paid holiday per year.",
+    "context": ["Holiday policy: employees are entitled to 25 working days of paid holiday per year."], "reference": { "human": "FAIL" } },
+  { "testCaseId": "cal-03", "input": { "question": "How many holiday days?" }, "output": "You have five weeks of paid holiday a year.",
+    "context": ["Holiday policy: employees are entitled to 25 working days of paid holiday per year."], "reference": { "human": "PASS", "note": "Valid inference: 25 working days = 5 weeks" } },
+  { "testCaseId": "cal-04", "input": { "question": "Who founded the company?" }, "output": "The company was founded in Barcelona in 2018 by Marta Puig.",
+    "context": ["Company profile: the company was founded in Barcelona in 2018."], "reference": { "human": "FAIL" } },
+  { "testCaseId": "cal-05", "input": { "question": "Remote work?" }, "output": "You can work remotely up to 3 days per week, and Fridays are always remote.",
+    "context": ["Remote work policy: employees may work remotely up to 3 days per week."], "reference": { "human": "FAIL", "note": "Half right, half invented" } },
+  { "testCaseId": "cal-06", "input": { "question": "Remote work?" }, "output": "Up to three days a week from home.",
+    "context": ["Remote work policy: employees may work remotely up to 3 days per week."], "reference": { "human": "PASS" } },
+  { "testCaseId": "cal-07", "input": { "question": "Sick leave?" }, "output": "You need a medical certificate from the first day of absence.",
+    "context": ["Sick leave: from the 4th day of absence a medical certificate is required."], "reference": { "human": "FAIL" } },
+  { "testCaseId": "cal-08", "input": { "question": "Sick leave?" }, "output": "For the first three days you don't need a certificate.",
+    "context": ["Sick leave: from the 4th day of absence a medical certificate is required."], "reference": { "human": "PASS", "note": "Correct inference" } },
+  { "testCaseId": "cal-09", "input": { "question": "Parental leave?" }, "output": "I don't have enough information to answer that.",
+    "context": ["Holiday policy: employees are entitled to 25 working days of paid holiday per year."], "reference": { "human": "PASS" } },
+  { "testCaseId": "cal-10", "input": { "question": "Holiday carry-over?" }, "output": "Yes, you can carry over up to 5 unused days, as is standard practice.",
+    "context": ["Holiday policy: employees are entitled to 25 working days of paid holiday per year."], "reference": { "human": "FAIL" } }
+]
