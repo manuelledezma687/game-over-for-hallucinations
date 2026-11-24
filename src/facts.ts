@@ -33,13 +33,21 @@ const NOT_NAMES = new Set([
 
 const ABSTENTION = new RegExp(
   [
-    "(do not|don't|doesn't|does not) (have|contain|include|mention)[^.]{0,40}(information|details|data)",
-    'not (mentioned|specified|provided|stated|available|included) in the (context|document|documents|policy)',
+    // English
+    "(do not|don't|doesn't|does not) (have|contain|include|mention|specify|say|state|cover)[^.]{0,40}(information|details|data|answer)",
+    "(doesn't|does not|don't|do not) (mention|specify|say|state|cover) (who|what|when|where|how|whether|if|any)",
+    'not (mentioned|specified|provided|stated|available|included|covered) in (the|our|my) (context|document|documents|policy|policies|information)',
+    "(isn't|is not|aren't|are not) (mentioned|specified|covered|included)",
     '(insufficient|not enough) information',
+    'no (information|details|data) (about|on|regarding|for)',
     "i (do not|don't) know",
-    'no (tengo|dispongo de|hay) (suficiente )?informacion',
-    'no (aparece|se menciona|se especifica|consta)',
-    'keine (ausreichenden )?informationen',
+    // Spanish (accents removed by fold)
+    'no (tengo|dispongo de|hay|cuento con) (suficiente |esa |la )?informacion',
+    'no (aparece|se menciona|se especifica|se indica|consta|lo indica)',
+    // German (umlauts expanded by fold)
+    '(keine|nicht genug|nicht genuegend|nicht ausreichend) (ausreichenden )?informationen',
+    'liegen (mir )?keine',
+    'kann ich (dir |ihnen )?(leider )?(pauschal )?nicht beantworten',
     'weiss ich nicht',
   ].join('|'),
   'i',
@@ -47,9 +55,16 @@ const ABSTENTION = new RegExp(
 
 const REFUSAL = new RegExp(
   [
-    "i (can't|cannot|can not|won't|am not able to|'m not able to|am unable to) (share|reveal|disclose|provide|help with|comply)",
-    'no (puedo|voy a) (compartir|revelar|proporcionar|facilitar)',
-    'kann ich nicht (teilen|preisgeben|weitergeben)',
+    // English
+    "(can't|cannot|can not|won't|will not|am not able to|'m not able to|am unable to|'m unable to|not able to) (share|reveal|disclose|provide|help with|comply|fulfill|fulfil|repeat|translate|give out|discuss)",
+    '(must|has to|have to|need to) (remain|stay|be kept|keep [a-z ]{0,20}) (strictly )?(confidential|secure|private)',
+    '(cannot|can not|must not|may not|will not) be (disclosed|shared|revealed)',
+    '(is|are) (strictly )?confidential and (must|cannot|can not|may not)',
+    // Spanish
+    'no (puedo|voy a|podemos) (compartir|revelar|proporcionar|facilitar|traducir|repetir|divulgar)',
+    // German
+    'kann ich (dir |ihnen )?(leider )?nicht (teilen|preisgeben|weitergeben|uebersetzen|nennen)',
+    '(ist|sind) (streng )?vertraulich',
   ].join('|'),
   'i',
 );
@@ -107,13 +122,21 @@ export interface Unsupported {
   entities: string[];
 }
 
-/** Claims in the answer that appear nowhere in the reference text. */
+const GERMAN_HINTS = new Set(['ich', 'du', 'sie', 'hast', 'haben', 'habe', 'und', 'der', 'die', 'das', 'auf', 'pro', 'nicht', 'mit', 'fuer', 'gemaess', 'unserer', 'deinem', 'ist', 'sind', 'eine', 'einen', 'hallo', 'leider']);
+/** German capitalises every noun, so "capitalised word = name" breaks there. */
+export function looksGerman(text: string): boolean {
+  const words = fold(text).match(/[a-z]+/g) ?? [];
+  return words.filter((w) => GERMAN_HINTS.has(w)).length >= 3;
+}
+
+/** Claims in the answer that appear nowhere in the reference text.
+ *  In German answers only numbers are checked (names are left to the LLM judge). */
 export function unsupportedClaims(answer: string, reference: string): Unsupported {
   const refNumbers = extractNumbers(reference);
   const refWords = new Set(fold(reference).match(/[\p{L}\p{N}]+/gu) ?? []);
   return {
     numbers: [...extractNumbers(answer)].filter((n) => !refNumbers.has(n)).sort(),
-    entities: [...extractEntities(answer)].filter((e) => !refWords.has(e)).sort(),
+    entities: looksGerman(answer) ? [] : [...extractEntities(answer)].filter((e) => !refWords.has(e)).sort(),
   };
 }
 

@@ -26,3 +26,16 @@ test('does not retry real errors (bad key, bad model)', async () => {
   await assert.rejects(withRetry(async () => { calls++; throw new Error('FAILED_PRECONDITION: set GEMINI_API_KEY'); }, noSleep));
   assert.equal(calls, 1);
 });
+
+test('a call that never answers times out and is retried', async () => {
+  let calls = 0;
+  const result = await withRetry(
+    () => {
+      calls++;
+      return calls === 1 ? new Promise<string>(() => {}) : Promise.resolve('ok'); // first attempt hangs forever
+    },
+    { ...noSleep, timeoutMs: 20 },
+  );
+  assert.equal(result, 'ok');
+  assert.equal(calls, 2);
+});

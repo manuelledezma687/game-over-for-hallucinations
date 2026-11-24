@@ -56,11 +56,14 @@ for (const [evaluator, ms] of [...byEvaluator].sort()) {
   const passed = scored.filter((m) => m.status === 'PASS').length;
   const rate = scored.length ? passed / scored.length : 1;
   const failed = scored.filter((m) => m.status === 'FAIL');
+  const errored = ms.filter((m) => m.error).length;
   const isJudge = !evaluator.startsWith('custom/');
-  const blocked = isJudge ? rate < JUDGE_MIN_PASS_RATE : failed.length > 0;
-  console.log(`${blocked ? '❌' : '✅'} ${evaluator.padEnd(34)} ${passed}/${scored.length} passed${isJudge ? `  (gate: ≥ ${JUDGE_MIN_PASS_RATE * 100}%)` : ''}`);
+  const noVerdicts = errored > 0 && scored.length === 0; // e.g. the judge never answered: that is not a pass
+  const blocked = noVerdicts || (isJudge ? rate < JUDGE_MIN_PASS_RATE : failed.length > 0);
+  const errNote = errored ? `, ${errored} without a verdict (errors)` : '';
+  console.log(`${blocked ? '❌' : '✅'} ${evaluator.padEnd(34)} ${passed}/${scored.length} passed${errNote}${isJudge ? `  (gate: ≥ ${JUDGE_MIN_PASS_RATE * 100}%)` : ''}`);
   if (!quiet) for (const m of failed) console.log(`     ↳ ${m.rationale}`);
-  if (blocked) problems.push(`${evaluator}: ${failed.length} failing case(s)`);
+  if (blocked) problems.push(noVerdicts ? `${evaluator}: no verdicts (all calls failed)` : `${evaluator}: ${failed.length} failing case(s)`);
 }
 
 if (baseline) {

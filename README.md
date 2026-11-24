@@ -135,11 +135,17 @@ Try a question the documents can't answer, like `"Who founded the company?"`. A 
 
 This terminal stays busy while the app runs. Press **Ctrl+C** when you're done.
 
+On Windows, Ctrl+C sometimes leaves the app running in the background (a Genkit bug, see [Troubleshooting](#troubleshooting)). To close it for sure:
+
+```
+npm run stop
+```
+
 ---
 
 ## Step 5 — Run the real evaluations (uses internet and API quota)
 
-> Close `npm run dev` first (Ctrl+C). Each command below starts its own copy of the app.
+> These commands run everything inside one process: they don't need `npm run dev` and don't conflict with it. Each case prints a line as it finishes (✅ pass, ❌ fail, ⚠️ no verdict), so you can follow the progress.
 
 ### Level 3: let the judge grade 10 answers
 
@@ -149,7 +155,7 @@ npm run eval:judge
 
 **What it does:** gives Gemini, acting as a **judge**, 10 answers that a human already graded by hand. The judge decides whether each answer is supported by the documents.
 
-**What you'll see:** it takes 1–3 minutes. If Gemini is busy (errors `503` or `429`), it waits a minute and retries only the failed answers: you'll see `⏳ … Waiting 60s, retry 1/3`. Don't cancel it. On Windows you may see an error about `wmic.exe` at the end; it's harmless (see [Troubleshooting](#troubleshooting)).
+**What you'll see:** one line per answer, usually within a minute. If Gemini is busy or you hit your quota (errors `503` or `429`), that answer is retried by itself after 10, 20, 40 and 80 seconds: you'll see `Judge quota (attempt 1/5), retrying in 10s…`. Don't cancel it. If a call never answers, it's cut after 2 minutes and retried too.
 
 ### Level 3: grade the judge
 
@@ -189,6 +195,8 @@ npm run eval
 
 **What it does:** asks the app the 10 questions in `datasets/golden.json` (questions with an approved answer, questions it must *not* answer, and a real past incident) and grades every answer with all the checks, including the judge. Results go to `reports/current.json`.
 
+Prefer Genkit's own tooling? `npm run eval:cli` runs the same golden set with `genkit eval:flow`, and you can browse the results in the Developer UI (**Evaluations** tab). It's the Genkit-native way, but on Windows the CLI has the `wmic.exe` issue (see [Troubleshooting](#troubleshooting)), which is why the other commands don't use it.
+
 ### Level 4: attack the app
 
 ```
@@ -213,7 +221,7 @@ npx tsx scripts/gate.ts reports/current.json baselines/golden.json --update-base
 
 ### Break it on purpose
 
-Version 2 of the app has a "friendlier" system prompt: *"Always give the user a useful answer."* One sentence. Watch what it does:
+Version 2 of the app has the system prompt a product manager asked for after users complained about "I don't know": *"Users hate hearing 'I don't know', so always give a complete, helpful answer to whatever they ask."* One sentence. Watch what it does:
 
 ```powershell
 $env:PROMPT_VERSION="v2"        # macOS/Linux: export PROMPT_VERSION=v2
@@ -230,10 +238,12 @@ Remove-Item Env:PROMPT_VERSION  # macOS/Linux: unset PROMPT_VERSION
 npm run prerun
 ```
 
+> Already have a judge calibration you're happy with? `npm run prerun:flows` re-records only versions 1 and 2.
+
 **What it does:** the big one. It "records" everything the live demo will show, so you never wait for Gemini in front of an audience:
 
 1. Asks **version 1** (strict prompt) all 15 questions (golden set + attacks) and grades them.
-2. Asks **version 2** ("friendlier" prompt) the same 15 questions.
+2. Asks **version 2** (the "never say I don't know" prompt) the same 15 questions.
 3. Runs the judge calibration (like `npm run eval:judge`).
 
 Everything is saved in the `reports` folder. To save quota, versions 1 and 2 use only the free, instant checks; the judge gets its own step.
@@ -294,10 +304,12 @@ Set them like the API key: `setx NAME "value"` + a new window on Windows, or `ex
 | `GEMINI_MODEL` | `gemini-flash-lite-latest` | The model behind the HR assistant |
 | `JUDGE_MODEL` | `gemini-flash-latest` | The model acting as judge (Level 3) |
 | `EMBEDDER_MODEL` | `gemini-embedding-001` | Used by the "answer relevancy" judge metric |
-| `PROMPT_VERSION` | `v1` | `v2` = the "friendlier" prompt that breaks things |
+| `PROMPT_VERSION` | `v1` | `v2` = the "never say I don't know" prompt that breaks things |
 | `GUARD` | `on` | `off` disables the production guardrail (final boss) |
 | `JUDGE_THRESHOLD` | — | Only for `npm run calibrate`: a stricter pass mark, e.g. `0.9` |
 | `JUDGE_MIN_PASS_RATE` | `0.8` | Minimum share of judge PASSes for `npm run gate` |
+| `VERBOSE` | — | `1` shows Genkit's full error messages during evaluations |
+| `GOFH_FAKE_MODEL` | — | `1` replaces Gemini with an offline stand-in that answers with the first document it finds. Checks the whole pipeline with no key or quota; never use it for the real demo |
 
 Model names change over time. The current list is at [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models).
 
@@ -309,12 +321,13 @@ Model names change over time. The current list is at [ai.google.dev/gemini-api/d
 |---|---|---|
 | `Please pass in the API key or set the GEMINI_API_KEY…` | This terminal doesn't have your key | Redo [Step 2](#step-2--give-the-app-your-api-key) and open a **new** terminal |
 | `[503 Service Unavailable] … high demand` | Google's model is overloaded right now | The app retries by itself (2s, 4s, 8s). If it still fails, wait a few minutes or use a lighter model |
-| `[429 Too Many Requests]` | You've used your per-minute quota | Wait a minute. `eval:judge` and `prerun` retry automatically |
+| `[429 Too Many Requests]` | You've used your per-minute quota | Nothing: every command retries by itself, waiting up to 80 seconds. If it still fails, run it again a few minutes later |
 | `[404 Not Found] This model … is no longer available` | That model name was retired | Set `GEMINI_MODEL` (or `JUDGE_MODEL`, `EMBEDDER_MODEL`) to the name the error suggests |
 | The Developer UI keeps loading for minutes on the Gemini step | Heavier models can be very slow or stuck | Ctrl+C and use `gemini-flash-lite-latest` |
-| `Error: spawn wmic.exe ENOENT` (Windows) | A Genkit bug: it uses a Windows tool (WMIC) that recent Windows 11 removed. It happens **after** the results are saved | Ignore it: the scripts detect this and continue. To remove it, run in PowerShell **as administrator**: `DISM /Online /Add-Capability /CapabilityName:WMIC~~~~` |
+| `Error: spawn wmic.exe ENOENT` (Windows, only with `npm run dev` or `npm run eval:cli`) | A Genkit CLI bug: it uses a Windows tool (WMIC) that recent Windows 11 removed, so it can't close the app and leaves it running | Run `npm run stop` to close leftover apps. The evaluation commands don't use the CLI, so they're not affected |
+| An evaluation hangs, or `EADDRINUSE` | A leftover app from an earlier run | `npm run stop`, then run the command again |
 | `ReferenceError: __dirname is not defined` in judge results | A known Genkit evaluator bug | Run `node scripts/fix-evaluator.mjs` (it also runs on `npm install`) |
-| `calibrate` says `0 cases`, or lists cases without a verdict | The judge calls failed | The list says why for each case. `503`/`429`: run `npm run eval:judge` again |
+| `calibrate` says `0 cases`, or lists cases without a verdict | The judge calls failed even after retrying | The list says why for each case. `503`/`429`: wait a few minutes and run `npm run eval:judge` again. For full Genkit error messages: `VERBOSE=1` (PowerShell: `$env:VERBOSE="1"`) |
 | `No statements returned` for one case | That answer is "I don't know": it has no claims to judge | Expected. Level 2's own check covers it |
 | Port 4000 is already in use | Another `npm run dev` is still running | Close it with Ctrl+C |
 | `deprecated`, `vulnerabilities`, `DEP0190` warnings | Warnings from Genkit's internal libraries | Harmless for a local demo. The high-severity ones are denial-of-service issues in Genkit's dependencies with no compatible fix yet, and this demo doesn't expose a server |
@@ -327,14 +340,15 @@ Model names change over time. The current list is at [ai.google.dev/gemini-api/d
 |---|---|
 | `src/index.ts` | The HR assistant: document lookup, the Gemini call, the judge setup and the production guardrail |
 | `src/docs.ts` | The assistant's 6 documents, including a confidential one with the canary code and a wiki page with a hidden attack |
-| `src/prompts.ts` | System prompt v1 (strict) and v2 ("friendlier") |
+| `src/prompts.ts` | System prompt v1 (strict) and v2 ("never say I don't know") |
 | `src/facts.ts`, `src/checks.ts` | The free, instant checks: numbers, names, "I don't know", leaked secrets (English, Spanish, German) |
 | `src/retry.ts` | Retries when Gemini is overloaded |
 | `datasets/golden.json` | Level 2: 10 golden questions |
 | `datasets/attacks.json` | Level 4: 5 attacks |
 | `datasets/judge-calibration.json` | Level 3: 10 answers graded by a human |
 | `scripts/demo.ts` | The 7-step stage demo |
-| `scripts/eval.ts` | Runs Genkit evaluations (with retries and the Windows workaround) |
+| `scripts/run.ts` | Runs the app and all evaluations in one process, with retries and timeouts |
+| `scripts/stop.ts`, `scripts/runtimes.ts` | `npm run stop`: closes Genkit apps left running in the background |
 | `scripts/gate.ts`, `scripts/calibrate.ts` | Level 5 gate and Level 3 judge check |
 | `test/` | The practice exam (`npm test`) |
 | `reports/` | Created when you run evaluations. Your results live here |
