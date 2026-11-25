@@ -9,11 +9,8 @@
  *   - anything that PASSED in the baseline now FAILS     -> regression after a model/prompt change
  */
 import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import { JUDGE_MIN_PASS_RATE, evaluateGate, type Result } from './gate-core.js';
 
-interface Metric { evaluator: string; score?: unknown; status?: string; rationale?: string; error?: string }
-interface Result { testCaseId: string; output?: unknown; error?: string; metrics?: Metric[] }
-
-const JUDGE_MIN_PASS_RATE = Number(process.env.JUDGE_MIN_PASS_RATE ?? 0.8);
 const [currentPath, baselinePath] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const updateBaseline = process.argv.includes('--update-baseline');
 const quiet = process.argv.includes('--quiet'); // stage mode: counts only, details elsewhere
@@ -23,63 +20,29 @@ if (!currentPath) {
 }
 
 const load = (p: string): Result[] => JSON.parse(readFileSync(p, 'utf8'));
-const statuses = (results: Result[]) => {
-  const map = new Map<string, Metric>();
-  for (const r of results) {
-    for (const raw of r.metrics ?? []) {
-      const m = { ...raw, evaluator: raw.evaluator.replace(/^\/evaluator\//, '') }; // CLI writes "/evaluator/custom/x"
-      map.set(`${r.testCaseId} :: ${m.evaluator}`, m);
-    }
-  }
-  return map;
-};
-const reasonOf = (m: Metric) => String(m.rationale ?? m.error ?? '').slice(0, 110);
+const outcome = evaluateGate(load(currentPath), baselinePath && existsSync(baselinePath) ? load(baselinePath) : undefined);
 
-const currentResults = load(currentPath);
-const current = statuses(currentResults);
-const baseline = baselinePath && existsSync(baselinePath) ? statuses(load(baselinePath)) : undefined;
-const problems: string[] = [];
-
-// A case that crashed has no metrics. Without this check the gate would pass silently.
-const crashed = currentResults.filter((r) => r.error || !r.metrics?.length);
-if (crashed.length) {
-  console.log(`\n❌ ${crashed.length}/${currentResults.length} case(s) produced no evaluation (inference or evaluator error):`);
-  for (const r of crashed.slice(0, 5)) console.log(`     ↳ ${r.testCaseId} — ${String(r.error ?? 'no metrics').slice(0, 110)}`);
-  problems.push(`${crashed.length} case(s) not evaluated`);
+if (outcome.crashed.length) {
+  console.log(`\n❌ ${outcome.crashed.length}/${outcome.total} case(s) produced no evaluation (inference or evaluator error):`);
+  for (const r of outcome.crashed.slice(0, 5)) console.log(`     ↳ ${r.testCaseId} — ${String(r.error ?? 'no metrics').slice(0, 110)}`);
 }
 
 console.log('\n=== Scoreboard ===');
-const byEvaluator = new Map<string, Metric[]>();
-for (const [key, m] of current) byEvaluator.set(m.evaluator, [...(byEvaluator.get(m.evaluator) ?? []), { ...m, rationale: key.split(' :: ')[0] + ' — ' + reasonOf(m) }]);
-for (const [evaluator, ms] of [...byEvaluator].sort()) {
-  const scored = ms.filter((m) => m.status === 'PASS' || m.status === 'FAIL');
-  const passed = scored.filter((m) => m.status === 'PASS').length;
-  const rate = scored.length ? passed / scored.length : 1;
-  const failed = scored.filter((m) => m.status === 'FAIL');
-  const errored = ms.filter((m) => m.error).length;
-  const isJudge = !evaluator.startsWith('custom/');
-  const noVerdicts = errored > 0 && scored.length === 0; // e.g. the judge never answered: that is not a pass
-  const blocked = noVerdicts || (isJudge ? rate < JUDGE_MIN_PASS_RATE : failed.length > 0);
-  const errNote = errored ? `, ${errored} without a verdict (errors)` : '';
-  console.log(`${blocked ? '❌' : '✅'} ${evaluator.padEnd(34)} ${passed}/${scored.length} passed${errNote}${isJudge ? `  (gate: ≥ ${JUDGE_MIN_PASS_RATE * 100}%)` : ''}`);
-  if (!quiet) for (const m of failed) console.log(`     ↳ ${m.rationale}`);
-  if (blocked) problems.push(noVerdicts ? `${evaluator}: no verdicts (all calls failed)` : `${evaluator}: ${failed.length} failing case(s)`);
+for (const row of outcome.rows) {
+  const errNote = row.errored ? `, ${row.errored} without a verdict (errors)` : '';
+  console.log(`${row.blocked ? '❌' : '✅'} ${row.evaluator.padEnd(34)} ${row.passed}/${row.scored} passed${errNote}${row.isJudge ? `  (gate: ≥ ${JUDGE_MIN_PASS_RATE * 100}%)` : ''}`);
+  if (!quiet) for (const f of row.failures) console.log(`     ↳ ${f}`);
 }
 
-if (baseline) {
+if (outcome.regressions) {
   console.log('\n=== Regressions vs baseline ===');
-  const regressions = [...current].filter(([key, now]) => baseline.get(key)?.status === 'PASS' && now.status === 'FAIL');
-  const perEvaluator = new Map<string, string[]>();
-  for (const [key, m] of regressions) perEvaluator.set(m.evaluator, [...(perEvaluator.get(m.evaluator) ?? []), key.split(' :: ')[0]]);
-  for (const [evaluator, ids] of perEvaluator) {
-    console.log(`⬇️  ${evaluator.padEnd(34)} ${ids.length} case(s) PASS → FAIL: ${ids.join(', ')}`);
-    problems.push(`regression in ${evaluator}`);
-  }
-  if (!regressions.length) console.log('none');
+  for (const r of outcome.regressions) console.log(`⬇️  ${r.evaluator.padEnd(34)} ${r.caseIds.length} case(s) PASS → FAIL: ${r.caseIds.join(', ')}`);
+  if (!outcome.regressions.length) console.log('none');
 }
 
-if (problems.length) {
-  console.log(`\nRelease: BLOCKED 🛑  GAME OVER for this release (${problems.length} problem(s))`);
+if (outcome.blocked) {
+  console.log(`\nRelease: BLOCKED 🛑  GAME OVER for this release (${outcome.problems.length} problem(s))`);
+  console.log('Details for every case: npm run report');
   process.exit(1);
 }
 console.log('\nRelease: OK ✅  level cleared');

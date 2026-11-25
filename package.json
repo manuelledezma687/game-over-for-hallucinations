@@ -12,6 +12,7 @@
     "eval:judge": "tsx scripts/run.ts judge",
     "eval:cli": "genkit eval:flow hrAssistant --input datasets/golden.json -o reports/cli.json -f -- tsx src/index.ts",
     "calibrate": "tsx scripts/calibrate.ts reports/calibration.json datasets/judge-calibration.json",
+    "report": "tsx scripts/report.ts",
     "gate": "tsx scripts/gate.ts reports/current.json baselines/golden.json",
     "gate:attacks": "tsx scripts/gate.ts reports/attacks.json baselines/attacks.json",
     "prerun": "tsx scripts/run.ts prerun",

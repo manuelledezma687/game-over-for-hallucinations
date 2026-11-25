@@ -6,14 +6,18 @@
  *
  *   npm run demo -- --offline    force recorded answers
  *   npm run demo -- --step 5     jump to a step
- *   npm run demo -- --no-pause   run everything (rehearsal / CI)
+ *   npm run demo -- --no-pause   run everything (rehearsal / CI); writes the report but does not open it
+ *   npm run demo -- --no-report  end at step 7, without the HTML report
+ *
+ * After step 7, one more Enter opens reports/report-v1-v2.html: every v1 and v2 test, in the browser.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import assert from 'node:assert/strict';
 import { factCheck, levelOf, productionGuard } from '../src/checks.js';
 import { PROMPTS } from '../src/prompts.js';
+import { buildReport, collect, openInBrowser } from './report.js';
 
 const args = process.argv.slice(2);
 const offline = args.includes('--offline') || !existsSync('reports/v1.json') || !existsSync('reports/v2.json');
@@ -131,4 +135,17 @@ await step(7, 'FINAL BOSS · production', () => {
 });
 
 console.log(`\n${C.bold}GAME OVER — for the release, not for the AI.${C.reset}`);
+
+// Last Enter: the details behind steps 3 and 5, test by test, from the same files.
+if (!args.includes('--no-report')) {
+  if (pause) await rl.question(`${C.dim}[Enter] open the report: every v1 and v2 test${C.reset}`);
+  const input = collect(dir);
+  input.runs = input.runs.filter((r) => r.name === 'v1' || r.name === 'v2');
+  input.calibration = undefined;
+  const out = 'reports/report-v1-v2.html';
+  mkdirSync('reports', { recursive: true });
+  writeFileSync(out, buildReport(input));
+  console.log(`Report: ${out}  (${input.runs.map((r) => r.file).join(' + ')})`);
+  if (pause) openInBrowser(out);
+}
 rl.close();

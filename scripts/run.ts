@@ -23,12 +23,14 @@ if (!VERBOSE) console.debug = () => {}; // the evaluator plugin dumps whole data
 /** Genkit prints long stack traces when a judge call fails. The reason is saved in the report anyway. */
 async function quietly<T>(fn: () => Promise<T>): Promise<T> {
   if (VERBOSE) return fn();
-  const original = console.error;
+  const original = { error: console.error, warn: console.warn };
   console.error = () => {};
+  console.warn = () => {}; // e.g. "strict mode: use allowUnionTypes…" from Genkit's schema validator
   try {
     return await fn();
   } finally {
-    console.error = original;
+    console.error = original.error;
+    console.warn = original.warn;
   }
 }
 const { ai, hrAssistant, models } = await import('../src/index.js');
@@ -48,6 +50,19 @@ const load = (file: string): Case[] => JSON.parse(readFileSync(file, 'utf8'));
 const save = (file: string, results: Result[]) => {
   mkdirSync('reports', { recursive: true });
   writeFileSync(file, JSON.stringify(results, null, 2));
+  // Who produced this file, and when: the HTML report shows it next to each run.
+  const INFO = 'reports/run-info.json';
+  let info: Record<string, unknown> = {};
+  try {
+    info = JSON.parse(readFileSync(INFO, 'utf8'));
+  } catch {}
+  info[file.replace(/^reports\//, '')] = {
+    at: new Date().toISOString(),
+    appModel: models.app,
+    judgeModel: models.judge,
+    promptVersion: process.env.PROMPT_VERSION ?? 'v1',
+  };
+  writeFileSync(INFO, JSON.stringify(info, null, 2));
 };
 const icon = (s?: string) => (s === 'PASS' ? '✅' : s === 'FAIL' ? '❌' : s === 'ERROR' ? '⚠️ ' : '·');
 
@@ -119,16 +134,38 @@ async function evaluateFlow(dataset: Case[], version: 'v1' | 'v2', withJudge: bo
 
 /** Level 3: the judge grades answers a human already graded. */
 async function calibrate() {
+  const OUT = 'reports/calibration.json';
   const dataset = load('datasets/judge-calibration.json');
-  console.log(`\n▶ judge calibration · ${dataset.length} human-labelled answers → reports/calibration.json`);
+  console.log(`\n▶ judge calibration · ${dataset.length} human-labelled answers → ${OUT}`);
   const results: Result[] = [];
+  let quotaInARow = 0;
   for (const [i, c] of dataset.entries()) {
     const m = await judge('genkitEval/faithfulness', c);
+    quotaInARow = m.error && /429|RESOURCE_EXHAUSTED/i.test(m.error) ? quotaInARow + 1 : 0;
     const why = m.error ? m.error.replace(/\s+/g, ' ').replace(/^Evaluation of test case \S+ failed: /, '').slice(0, 70) : `score ${m.score}`;
     console.log(`  [${String(i + 1).padStart(2)}/${dataset.length}] ${c.testCaseId.padEnd(8)} ${icon(m.error ? 'ERROR' : m.status)} ${why}`);
     results.push({ ...c, metrics: [m] });
+    if (quotaInARow >= 2) {
+      console.error(
+        `\n🛑 Judge stopped: ${models.judge} is out of quota (429) even after waiting.\n` +
+          `   This is usually the DAILY free-tier quota: it resets the next day.\n` +
+          `   Options: run "npm run eval:judge" tomorrow, or try another judge model:\n` +
+          `     PowerShell:  $env:JUDGE_MODEL="gemini-flash-lite-latest"`,
+      );
+      break;
+    }
   }
-  save('reports/calibration.json', results);
+  // Never replace a calibration that has verdicts with one that has none (e.g. quota ran out).
+  const verdicts = (rs: Result[]) => rs.filter((r) => r.metrics.some((m) => m.status === 'PASS' || m.status === 'FAIL')).length;
+  let previous: Result[] = [];
+  try {
+    previous = JSON.parse(readFileSync(OUT, 'utf8'));
+  } catch {}
+  if (verdicts(results) === 0 && verdicts(previous) > 0) {
+    console.log(`   Kept your previous calibration (${verdicts(previous)} verdicts) instead of saving one with none.`);
+    return;
+  }
+  save(OUT, results);
 }
 
 const golden = () => load('datasets/golden.json');
@@ -145,7 +182,7 @@ else if (mode === 'flows' || mode === 'prerun') {
   await evaluateFlow([...golden(), ...attacks()], 'v1', false, 'reports/v1.json');
   await evaluateFlow([...golden(), ...attacks()], 'v2', false, 'reports/v2.json');
   if (mode === 'prerun') await calibrate();
-  console.log(`\nReady for the stage: npm run demo`);
+  console.log(`\nReady for the stage: npm run demo   ·   every detail in HTML: npm run report`);
 } else {
   console.error('usage: tsx scripts/run.ts golden|attacks|judge|flows|prerun');
   process.exit(2);
